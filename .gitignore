@@ -5,11 +5,15 @@
 xcuserdata/
 project.xcworkspace
 *.xccheckout
-DerivedData
+DerivedData/
 /.build
+/Packages
 
 ## Swiftpm
 .swiftpm
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc
 .build
 /build
 Package.resolved
