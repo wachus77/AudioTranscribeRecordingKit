@@ -9,12 +9,18 @@ import Foundation
 
 public struct RecordingSettings {
     public let filename: String
-    public let shouldStopRecordingIfSpeechIsNotDetected: Bool
-    public let speechIsNotDetectedTimeoutInterval: TimeInterval
+    public let shouldNotifyIfSpeechWasNotDetectedOnceItStarts: Bool
+    public let speechWasNotDetectedOnceItStartsTimeoutInterval: TimeInterval
+    public let shouldNotifyIfSpeechWasNotDetectedAtAll: Bool
+    public let speechWasNotDetectedAtAllTimeoutInterval: TimeInterval
     
-    public init(filename: String, shouldStopRecordingIfSpeechIsNotDetected: Bool, speechIsNotDetectedTimeoutInterval: TimeInterval) {
+    public init(filename: String, shouldNotifyIfSpeechWasNotDetectedOnceItStarts: Bool, speechWasNotDetectedOnceItStartsTimeoutInterval: TimeInterval,
+                shouldNotifyIfSpeechWasNotDetectedAtAll: Bool,
+                speechWasNotDetectedAtAllTimeoutInterval: TimeInterval) {
         self.filename = filename
-        self.shouldStopRecordingIfSpeechIsNotDetected = shouldStopRecordingIfSpeechIsNotDetected
-        self.speechIsNotDetectedTimeoutInterval = speechIsNotDetectedTimeoutInterval
+        self.shouldNotifyIfSpeechWasNotDetectedOnceItStarts = shouldNotifyIfSpeechWasNotDetectedOnceItStarts
+        self.speechWasNotDetectedOnceItStartsTimeoutInterval = speechWasNotDetectedOnceItStartsTimeoutInterval
+        self.shouldNotifyIfSpeechWasNotDetectedAtAll = shouldNotifyIfSpeechWasNotDetectedAtAll
+        self.speechWasNotDetectedAtAllTimeoutInterval = speechWasNotDetectedAtAllTimeoutInterval
     }
 }

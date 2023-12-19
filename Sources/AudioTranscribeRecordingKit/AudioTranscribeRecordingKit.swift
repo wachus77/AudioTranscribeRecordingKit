@@ -18,6 +18,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     private let speechRecognizerSettings: SpeechRecognizerSettings
     
     @MainActor @Published public var audioMeterValues: [AudioMeterValue]
+    @MainActor @Published public var audioMeterSingleValue: AudioMeterValue
     
     private var audioEngine: AVAudioEngine?
     private var mixerNode: AVAudioMixerNode?
@@ -27,7 +28,8 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private let recognizer: SFSpeechRecognizer?
     
-    private var speechIsNotDetectedTimer: Timer?
+    private var speechWasNotDetectedOnceItStartsTimer: Timer?
+    private var speechWasNotDetectedAtAllTimer: Timer?
     
     private let recordingOutputFormatSettings = [
         AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -46,8 +48,8 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     @MainActor @Published public var error: Error?
     
-    @MainActor public var speechRecognitionTimedOutSubject = PassthroughSubject<Void, Never>()
-    
+    @MainActor public var speechWasNotDetectedOnceItStartsSubject = PassthroughSubject<Void, Never>()
+    @MainActor public var speechWasNotDetectedAtAllSubject = PassthroughSubject<Void, Never>()
     @MainActor public var speechWasDetectedSubject = CurrentValueSubject<Bool, Never>(false)
     
     @MainActor public var speechRecognizerAuthorizationStatusSubject = CurrentValueSubject<SFSpeechRecognizerAuthorizationStatus, Never>(.notDetermined)
@@ -71,7 +73,11 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     public init(isSpeechRecognizerEnabled: Bool = true,
                 isRecordingEnabled: Bool = true,
                 speechRecognizerSettings: SpeechRecognizerSettings = SpeechRecognizerSettings(supportedLanguage: SpeechRecognizerSettings.availableLanguages.first(where: { $0.identifier == "en-US" })),
-                recordingSettings: RecordingSettings = RecordingSettings(filename: "recording", shouldStopRecordingIfSpeechIsNotDetected: true, speechIsNotDetectedTimeoutInterval: 2),
+                recordingSettings: RecordingSettings = RecordingSettings(filename: "recording",
+                                                                         shouldNotifyIfSpeechWasNotDetectedOnceItStarts: true,
+                                                                         speechWasNotDetectedOnceItStartsTimeoutInterval: 2,
+                                                                         shouldNotifyIfSpeechWasNotDetectedAtAll: true,
+                                                                         speechWasNotDetectedAtAllTimeoutInterval: 10),
                 numberOfAudioMeters: Int = 4) {
         self.isSpeechRecognizerEnabled = isSpeechRecognizerEnabled
         self.isRecordingEnabled = isRecordingEnabled
@@ -79,6 +85,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         self.recordingSettings = recordingSettings
         self.numberOfAudioMeters = numberOfAudioMeters
         self.audioMeterValues = [AudioMeterValue](repeating: AudioMeterValue(value: .zero), count: numberOfAudioMeters)
+        self.audioMeterSingleValue = AudioMeterValue(value: 0)
         
         if self.isSpeechRecognizerEnabled {
             if let locale = self.speechRecognizerSettings.supportedLanguage?.locale {
@@ -95,8 +102,8 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
             self.recognizer = nil
         }
         
-        if self.isSpeechRecognizerEnabled == false && self.isRecordingEnabled && self.recordingSettings.shouldStopRecordingIfSpeechIsNotDetected {
-            error(AudioTranscribeRecordingError.speechRecognizerShouldBeEnabledForRecording)
+        if self.isSpeechRecognizerEnabled == false && self.isRecordingEnabled && (self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts || self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll) {
+            error(AudioTranscribeRecordingError.speechRecognizerShouldBeEnabledForRecordingTimeoutNotificationOptions)
             return
         }
         
@@ -236,8 +243,10 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         recognitionTask?.cancel()
         recognitionRequest?.endAudio()
         
-        speechIsNotDetectedTimer?.invalidate()
-        speechIsNotDetectedTimer = nil
+        speechWasNotDetectedOnceItStartsTimer?.invalidate()
+        speechWasNotDetectedOnceItStartsTimer = nil
+        speechWasNotDetectedAtAllTimer?.invalidate()
+        speechWasNotDetectedAtAllTimer = nil
         
         Task { @MainActor in
             state = .stopped
@@ -256,8 +265,12 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     public func pauseTranscribingAndRecording() {
         audioEngine?.pause()
-        speechIsNotDetectedTimer?.invalidate()
-        speechIsNotDetectedTimer = nil
+        
+        speechWasNotDetectedOnceItStartsTimer?.invalidate()
+        speechWasNotDetectedOnceItStartsTimer = nil
+        speechWasNotDetectedAtAllTimer?.invalidate()
+        speechWasNotDetectedAtAllTimer = nil
+        
         Task { @MainActor in
             state = .paused
         }
@@ -302,8 +315,15 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
             Task { @MainActor in
                 if let error = error {
                     self.error(error)
-                } else if recordingSettings.shouldStopRecordingIfSpeechIsNotDetected && speechWasDetectedSubject.value {
-                    restartSpeechIsNotDetectedTimer()
+                    return
+                }
+                
+                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value {
+                    restartSpeechWasNotDetectedOnceItStartsTimer()
+                }
+                
+                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll {
+                    restartSpeechWasNotDetectedAtAllTimer()
                 }
             }
         }
@@ -312,20 +332,31 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     private func audioMeterHandler(scaledAvgPower: Float) {
         Task { @MainActor in
+            audioMeterSingleValue = AudioMeterValue(value: scaledAvgPower)
             audioMeterValues[currentAudioMeterIndex] = AudioMeterValue(value: scaledAvgPower)
             currentAudioMeterIndex = (currentAudioMeterIndex + 1) % numberOfAudioMeters
         }
     }
     
-    private func restartSpeechIsNotDetectedTimer() {
-        speechIsNotDetectedTimer?.invalidate()
-        speechIsNotDetectedTimer = Timer.scheduledTimer(timeInterval: recordingSettings.speechIsNotDetectedTimeoutInterval, target: self, selector: #selector(speechIsNotDetectedTimedOut), userInfo: nil, repeats: false)
+    private func restartSpeechWasNotDetectedOnceItStartsTimer() {
+        speechWasNotDetectedOnceItStartsTimer?.invalidate()
+        speechWasNotDetectedOnceItStartsTimer = Timer.scheduledTimer(timeInterval: recordingSettings.speechWasNotDetectedOnceItStartsTimeoutInterval, target: self, selector: #selector(speechWasNotDetectedOnceItStarts), userInfo: nil, repeats: false)
     }
     
-    @objc private func speechIsNotDetectedTimedOut() {
-        stopTranscribingAndRecording()
+    private func restartSpeechWasNotDetectedAtAllTimer() {
+        speechWasNotDetectedAtAllTimer?.invalidate()
+        speechWasNotDetectedAtAllTimer = Timer.scheduledTimer(timeInterval: recordingSettings.speechWasNotDetectedAtAllTimeoutInterval, target: self, selector: #selector(speechWasNotDetectedAtAll), userInfo: nil, repeats: false)
+    }
+    
+    @objc private func speechWasNotDetectedOnceItStarts() {
         Task { @MainActor in
-            speechRecognitionTimedOutSubject.send()
+            speechWasNotDetectedOnceItStartsSubject.send()
+        }
+    }
+    
+    @objc private func speechWasNotDetectedAtAll() {
+        Task { @MainActor in
+            speechWasNotDetectedAtAllSubject.send()
         }
     }
     

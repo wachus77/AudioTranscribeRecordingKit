@@ -12,7 +12,7 @@ public enum AudioTranscribeRecordingError: CustomNSError, LocalizedError {
     case notAuthorizedToRecognize
     case notPermittedToRecord
     case recognizerIsUnavailable
-    case speechRecognizerShouldBeEnabledForRecording
+    case speechRecognizerShouldBeEnabledForRecordingTimeoutNotificationOptions
     
     public var errorDescription: String? {
         switch self {
@@ -20,8 +20,8 @@ public enum AudioTranscribeRecordingError: CustomNSError, LocalizedError {
         case .notAuthorizedToRecognize: return "Not authorized to recognize speech"
         case .notPermittedToRecord: return "Not permitted to record audio"
         case .recognizerIsUnavailable: return "Recognizer is unavailable"
-        case .speechRecognizerShouldBeEnabledForRecording:
-            return "Speech recognizer should be enabled for recording"
+        case .speechRecognizerShouldBeEnabledForRecordingTimeoutNotificationOptions:
+            return "Speech recognizer should be enabled for recording because of timeout notification options"
         }
     }
     

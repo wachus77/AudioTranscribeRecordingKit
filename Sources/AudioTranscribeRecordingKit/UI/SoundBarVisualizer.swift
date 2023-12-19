@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-public struct SoundVisualizer<Content: ShapeStyle>: View {
+public struct SoundBarVisualizer<Content: ShapeStyle>: View {
     @ObservedObject private var audioTranscribeRecordingKit: AudioTranscribeRecordingKit
     private let barSpacing: CGFloat
     private let barMinSize: CGFloat
