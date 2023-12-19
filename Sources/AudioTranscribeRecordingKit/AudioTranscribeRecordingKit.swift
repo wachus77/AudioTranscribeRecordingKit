@@ -48,6 +48,8 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     @MainActor public var speechRecognitionTimedOutSubject = PassthroughSubject<Void, Never>()
     
+    @MainActor public var speechWasDetectedSubject = CurrentValueSubject<Bool, Never>(false)
+    
     @MainActor public var speechRecognizerAuthorizationStatusSubject = CurrentValueSubject<SFSpeechRecognizerAuthorizationStatus, Never>(.notDetermined)
     
     @MainActor public var recordPermissionAuthorizationStatusSubject = CurrentValueSubject<Bool, Never>(false)
@@ -283,6 +285,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         if let result = result {
             receivedFinalResult = result.isFinal
             transcribePartial(result.bestTranscription.formattedString)
+            speechWasDetected(detected: true)
         }
         
         let receivedError = error != nil
@@ -294,11 +297,14 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         
         if let result, receivedFinalResult {
             transcribe(result.bestTranscription.formattedString)
+            speechWasDetected(detected: true)
         } else {
-            if let error = error {
-                self.error(error)
-            } else if recordingSettings.shouldStopRecordingIfSpeechIsNotDetected {
-                restartSpeechIsNotDetectedTimer()
+            Task { @MainActor in
+                if let error = error {
+                    self.error(error)
+                } else if recordingSettings.shouldStopRecordingIfSpeechIsNotDetected && speechWasDetectedSubject.value {
+                    restartSpeechIsNotDetectedTimer()
+                }
             }
         }
     }
@@ -320,6 +326,12 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         stopTranscribingAndRecording()
         Task { @MainActor in
             speechRecognitionTimedOutSubject.send()
+        }
+    }
+    
+    @objc private func speechWasDetected(detected: Bool) {
+        Task { @MainActor in
+            speechWasDetectedSubject.send(detected)
         }
     }
     
