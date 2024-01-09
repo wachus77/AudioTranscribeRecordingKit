@@ -251,6 +251,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         Task { @MainActor in
             state = .stopped
             audioMeterValues = [AudioMeterValue](repeating: AudioMeterValue(value: .zero), count: numberOfAudioMeters)
+            speechWasDetectedSubject.send(false)
         }
     }
     
@@ -318,11 +319,11 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                     return
                 }
                 
-                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value {
+                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
                     restartSpeechWasNotDetectedOnceItStartsTimer()
                 }
                 
-                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll {
+                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll && !speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
                     restartSpeechWasNotDetectedAtAllTimer()
                 }
             }
@@ -350,18 +351,21 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     @objc private func speechWasNotDetectedOnceItStarts() {
         Task { @MainActor in
+            guard state == .recording || state == .recordingAndTranscribing || state == .transcribing else { return }
             speechWasNotDetectedOnceItStartsSubject.send()
         }
     }
     
     @objc private func speechWasNotDetectedAtAll() {
         Task { @MainActor in
+            guard state == .recording || state == .recordingAndTranscribing || state == .transcribing else { return }
             speechWasNotDetectedAtAllSubject.send()
         }
     }
     
     @objc private func speechWasDetected(detected: Bool) {
         Task { @MainActor in
+            guard detected != speechWasDetectedSubject.value else { return }
             speechWasDetectedSubject.send(detected)
         }
     }
