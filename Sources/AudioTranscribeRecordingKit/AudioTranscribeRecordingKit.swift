@@ -365,7 +365,8 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     @objc private func speechWasDetected(detected: Bool) {
         Task { @MainActor in
-            guard detected != speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) else { return }
+            guard detected != speechWasDetectedSubject.value else { return }
+            guard (detected == true && (state == .recording || state == .recordingAndTranscribing || state == .transcribing)) || detected == false else { return }
             speechWasDetectedSubject.send(detected)
         }
     }
