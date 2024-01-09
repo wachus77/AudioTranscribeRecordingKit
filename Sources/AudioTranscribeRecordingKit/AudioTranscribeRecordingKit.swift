@@ -289,6 +289,10 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
             case (false, false):
                 state = .audioMeteringOnly
             }
+            
+            if recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll && !speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
+                restartSpeechWasNotDetectedAtAllTimer()
+            }
         }
     }
     
@@ -322,10 +326,6 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                 if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
                     restartSpeechWasNotDetectedOnceItStartsTimer()
                 }
-                
-                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll && !speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
-                    restartSpeechWasNotDetectedAtAllTimer()
-                }
             }
         }
     }
@@ -351,14 +351,14 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     @objc private func speechWasNotDetectedOnceItStarts() {
         Task { @MainActor in
-            guard state == .recording || state == .recordingAndTranscribing || state == .transcribing else { return }
+            guard (state == .recording || state == .recordingAndTranscribing || state == .transcribing) && speechWasDetectedSubject.value else { return }
             speechWasNotDetectedOnceItStartsSubject.send()
         }
     }
     
     @objc private func speechWasNotDetectedAtAll() {
         Task { @MainActor in
-            guard state == .recording || state == .recordingAndTranscribing || state == .transcribing else { return }
+            guard (state == .recording || state == .recordingAndTranscribing || state == .transcribing) && !speechWasDetectedSubject.value else { return }
             speechWasNotDetectedAtAllSubject.send()
         }
     }
@@ -367,6 +367,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         Task { @MainActor in
             guard detected != speechWasDetectedSubject.value else { return }
             guard (detected == true && (state == .recording || state == .recordingAndTranscribing || state == .transcribing)) || detected == false else { return }
+            speechWasNotDetectedAtAllTimer?.invalidate()
             speechWasDetectedSubject.send(detected)
         }
     }
