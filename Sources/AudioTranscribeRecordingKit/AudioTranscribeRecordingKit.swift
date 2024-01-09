@@ -221,7 +221,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                 self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
                 
             }
-            
+
             if isSpeechRecognizerEnabled, let recognitionRequest = recognitionRequest {
                 self.recognitionTask = recognizer?.recognitionTask(with: recognitionRequest, resultHandler: { [weak self] result, error in
                     self?.recognitionHandler(audioEngine: audioEngine, result: result, error: error)
@@ -251,7 +251,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         Task { @MainActor in
             state = .stopped
             audioMeterValues = [AudioMeterValue](repeating: AudioMeterValue(value: .zero), count: numberOfAudioMeters)
-            speechWasDetectedSubject.send(false)
+            speechWasDetected(detected: false)
         }
     }
     
@@ -365,7 +365,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     @objc private func speechWasDetected(detected: Bool) {
         Task { @MainActor in
-            guard detected != speechWasDetectedSubject.value else { return }
+            guard detected != speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) else { return }
             speechWasDetectedSubject.send(detected)
         }
     }
