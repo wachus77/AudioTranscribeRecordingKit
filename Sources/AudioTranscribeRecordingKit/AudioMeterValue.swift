@@ -10,4 +10,8 @@ import Foundation
 public struct AudioMeterValue: Identifiable, Hashable {
     public let id = UUID()
     public let value: Float
+    
+    public init(value: Float) {
+        self.value = value
+    }
 }
