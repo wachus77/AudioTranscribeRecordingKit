@@ -216,8 +216,8 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                     try? recordingOutputFile.write(from: convertedBuffer)
                 }
                 
-                guard let avgPowerInDecibels = self.avgPowerInDecibels(buffer: buffer) else { return }
-                let scaledAvgPower = self.scaledPower(power: avgPowerInDecibels)
+                guard let avgPowerInDecibels = AudioTranscribeRecordingKit.avgPowerInDecibels(buffer: buffer) else { return }
+                let scaledAvgPower = AudioTranscribeRecordingKit.scaledPower(power: avgPowerInDecibels)
                 self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
                 
             }
@@ -458,7 +458,7 @@ extension AudioTranscribeRecordingKit {
 // MARK: - Decibel calculation
 
 extension AudioTranscribeRecordingKit {
-    private func avgPowerInDecibels(buffer: AVAudioPCMBuffer) -> Float? {
+    public static func avgPowerInDecibels(buffer: AVAudioPCMBuffer) -> Float? {
         guard let channelData = buffer.floatChannelData else {
             return nil
         }
@@ -481,7 +481,7 @@ extension AudioTranscribeRecordingKit {
         return avgPower
     }
     
-    private func scaledPower(power: Float) -> Float {
+    public static func scaledPower(power: Float) -> Float {
         guard power.isFinite else {
             return 0.0
         }
