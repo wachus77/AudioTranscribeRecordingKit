@@ -11,11 +11,11 @@ import Combine
 
 public final class AudioTranscribeRecordingKit: ObservableObject {
     
-    private let isSpeechRecognizerEnabled: Bool
-    private let isRecordingEnabled: Bool
-    private let numberOfAudioMeters: Int
-    private let recordingSettings: RecordingSettings
-    private let speechRecognizerSettings: SpeechRecognizerSettings
+    public var isSpeechRecognizerEnabled: Bool
+    public var isRecordingEnabled: Bool
+    public var numberOfAudioMeters: Int
+    public var recordingSettings: RecordingSettings
+    public var speechRecognizerSettings: SpeechRecognizerSettings
     
     @MainActor @Published public var audioMeterValues: [AudioMeterValue]
     @MainActor @Published public var audioMeterSingleValue: AudioMeterValue
