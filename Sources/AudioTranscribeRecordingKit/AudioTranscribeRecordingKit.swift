@@ -14,8 +14,28 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     public var isSpeechRecognizerEnabled: Bool
     public var isRecordingEnabled: Bool
     public var numberOfAudioMeters: Int
-    public var recordingSettings: RecordingSettings
-    public var speechRecognizerSettings: SpeechRecognizerSettings
+    public var recordingSettings: RecordingSettings {
+        didSet {
+            if self.isSpeechRecognizerEnabled == false && self.isRecordingEnabled && (self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts || self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll) {
+                error(AudioTranscribeRecordingError.speechRecognizerShouldBeEnabledForRecordingTimeoutNotificationOptions)
+                return
+            }
+        }
+    }
+    public var speechRecognizerSettings: SpeechRecognizerSettings {
+        didSet {
+            if let locale = self.speechRecognizerSettings.supportedLanguage?.locale {
+                self.recognizer = SFSpeechRecognizer(locale: locale)
+            } else {
+                self.recognizer = SFSpeechRecognizer()
+            }
+            
+            guard self.recognizer != nil else {
+                error(AudioTranscribeRecordingError.nilRecognizer)
+                return
+            }
+        }
+    }
     
     @MainActor @Published public var audioMeterValues: [AudioMeterValue]
     @MainActor @Published public var audioMeterSingleValue: AudioMeterValue
@@ -26,7 +46,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let recognizer: SFSpeechRecognizer?
+    private var recognizer: SFSpeechRecognizer?
     
     private var speechWasNotDetectedOnceItStartsTimer: Timer?
     private var speechWasNotDetectedAtAllTimer: Timer?
