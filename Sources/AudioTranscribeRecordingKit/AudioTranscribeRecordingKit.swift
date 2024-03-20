@@ -130,31 +130,42 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         registerForNotifications()
         setupSession()
         setupEngine()
-        
-        Task {
-            do {
-                if self.isSpeechRecognizerEnabled {
-                    let (hasAuthorizationToRecognize, speechRecognizerAuthorizationStatus) = await SFSpeechRecognizer.hasAuthorizationToRecognize()
-                    
-                    speechRecognizerAuthorizationStatusSubject.send(speechRecognizerAuthorizationStatus)
-                    
-                    guard hasAuthorizationToRecognize else {
-                        throw AudioTranscribeRecordingError.notAuthorizedToRecognize
-                    }
-                }
-                
-                let hasPermissionToRecord = await AVAudioSession.sharedInstance().hasPermissionToRecord()
-                
-                recordPermissionAuthorizationStatusSubject.send(hasPermissionToRecord)
-                
-                guard hasPermissionToRecord else {
-                    throw AudioTranscribeRecordingError.notPermittedToRecord
-                }
-                
-            } catch {
-                self.error(error)
-            }
+    }
+    
+    // MARK: - Permissions
+    
+    public func checkRequiredPermissions() async -> Bool {
+        var hasFirstRequiredAuthorizationToRecognize = false
+        if self.isSpeechRecognizerEnabled {
+            hasFirstRequiredAuthorizationToRecognize = await hasAuthorizationToRecognize()
+        } else {
+            hasFirstRequiredAuthorizationToRecognize = true
         }
+        let hasSecondRequiredPermissionToRecord = await hasPermissionToRecord()
+        return hasFirstRequiredAuthorizationToRecognize && hasSecondRequiredPermissionToRecord
+    }
+    
+    private func hasAuthorizationToRecognize() async -> Bool {
+        let (hasAuthorizationToRecognize, speechRecognizerAuthorizationStatus) = await SFSpeechRecognizer.hasAuthorizationToRecognize()
+        
+        await speechRecognizerAuthorizationStatusSubject.send(speechRecognizerAuthorizationStatus)
+        
+        if !hasAuthorizationToRecognize {
+            self.error(AudioTranscribeRecordingError.notAuthorizedToRecognize)
+        }
+        
+        return hasAuthorizationToRecognize
+    }
+    
+    private func hasPermissionToRecord() async -> Bool {
+        let hasPermissionToRecord = await AVAudioSession.sharedInstance().hasPermissionToRecord()
+        
+        await recordPermissionAuthorizationStatusSubject.send(hasPermissionToRecord)
+        
+        if !hasPermissionToRecord {
+            self.error(AudioTranscribeRecordingError.notPermittedToRecord)
+        }
+        return hasPermissionToRecord
     }
     
     // MARK: - Setup
