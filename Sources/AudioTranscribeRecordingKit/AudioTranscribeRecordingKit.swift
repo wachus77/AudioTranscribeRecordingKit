@@ -128,8 +128,6 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         }
         
         registerForNotifications()
-        setupSession()
-        setupEngine()
     }
     
     // MARK: - Permissions
@@ -170,7 +168,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     // MARK: - Setup
     
-    private func setupSession() {
+    public func setupSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .defaultToSpeaker])
@@ -180,7 +178,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         }
     }
     
-    private func setupEngine() {
+    public func setupEngine() {
         audioEngine = AVAudioEngine()
         mixerNode = AVAudioMixerNode()
         
