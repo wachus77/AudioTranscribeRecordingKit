@@ -24,7 +24,10 @@ public struct SpeechRecognizerSettings {
     
     public let supportedLanguage: SpeechRecognizerSupportedLanguage?
     
-    public init(supportedLanguage: SpeechRecognizerSupportedLanguage?) {
+    public let decibelsMinValue: Float?
+    
+    public init(supportedLanguage: SpeechRecognizerSupportedLanguage?, decibelsMinValue: Float?) {
         self.supportedLanguage = supportedLanguage
+        self.decibelsMinValue = decibelsMinValue
     }
 }

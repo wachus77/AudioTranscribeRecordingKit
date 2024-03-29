@@ -92,7 +92,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     @MainActor
     public init(speechRecognizerMode: SpeechRecognizerMode = .decibels,
                 isRecordingEnabled: Bool = true,
-                speechRecognizerSettings: SpeechRecognizerSettings = SpeechRecognizerSettings(supportedLanguage: SpeechRecognizerSettings.availableLanguages.first(where: { $0.identifier == "en-US" })),
+                speechRecognizerSettings: SpeechRecognizerSettings = SpeechRecognizerSettings(supportedLanguage: SpeechRecognizerSettings.availableLanguages.first(where: { $0.identifier == "en-US" }), decibelsMinValue: 0.025),
                 recordingSettings: RecordingSettings = RecordingSettings(filename: "recording",
                                                                          shouldNotifyIfSpeechWasNotDetectedOnceItStarts: true,
                                                                          speechWasNotDetectedOnceItStartsTimeoutInterval: 2,
@@ -248,7 +248,6 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                 guard let avgPowerInDecibels = AudioTranscribeRecordingKit.avgPowerInDecibels(buffer: buffer) else { return }
                 let scaledAvgPower = AudioTranscribeRecordingKit.scaledPower(power: avgPowerInDecibels)
                 self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
-                
                 if speechRecognizerMode == .decibels {
                     verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: scaledAvgPower)
                 }
@@ -364,7 +363,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     private func verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: Float) {
         Task { @MainActor in
-            if scaledAvgPower > 0.4 {
+            if scaledAvgPower >= speechRecognizerSettings.decibelsMinValue ?? 0.025 {
                 speechWasDetected(detected: true)
                 if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
                     restartSpeechWasNotDetectedOnceItStartsTimer()
