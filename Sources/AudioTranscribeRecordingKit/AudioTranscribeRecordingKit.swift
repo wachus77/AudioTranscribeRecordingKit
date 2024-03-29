@@ -79,6 +79,9 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     private var isInterrupted = false
     private var configChangePending = false
     
+    private var recordingOutputFile: AVAudioFile?
+    private var isRecordingWhileAudioEngineIsOn: Bool = false
+    
     public var recordingOutputUrl: URL {
         return recordingFolderURL.appendingPathComponent("\(recordingSettings.filename).\(recordingFileExtension)")
     }
@@ -211,7 +214,69 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     // MARK: - Control methods (start, stop, pause, resume)
     
-    public func startTranscribingAndRecording() {
+    public func stopAudioEngineAndRemoveTap() {
+        mixerNode?.removeTap(onBus: 0)
+        audioEngine?.stop()
+    }
+    
+    public func startAudioEngineAndInstallTap() {
+        guard let audioEngine = audioEngine, let mixerNode = mixerNode  else { return }
+        
+        do {
+            let tapNode: AVAudioNode = mixerNode
+            let recordingFormat = tapNode.outputFormat(forBus: 0)
+            
+            tapNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] (buffer: AVAudioPCMBuffer, when: AVAudioTime) in
+                
+                guard let self = self else {
+                    return
+                }
+                
+                if isRecordingEnabled, isRecordingWhileAudioEngineIsOn, let recordingOutputFile, let convertedBuffer = convertBufferForAAC(buffer: buffer, to: recordingOutputFile.processingFormat) {
+                    try? recordingOutputFile.write(from: convertedBuffer)
+                }
+                
+                if isRecordingWhileAudioEngineIsOn {
+                    guard let avgPowerInDecibels = AudioTranscribeRecordingKit.avgPowerInDecibels(buffer: buffer) else { return }
+                    let scaledAvgPower = AudioTranscribeRecordingKit.scaledPower(power: avgPowerInDecibels)
+                    self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
+                    if speechRecognizerMode == .decibels {
+                        verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: scaledAvgPower)
+                    }
+                }
+            }
+            
+            try audioEngine.start()
+        } catch {
+            self.error(error)
+        }
+    }
+    
+    public func startRecordingWhileAudioEngineIsOn() {
+        if isRecordingEnabled {
+            isRecordingWhileAudioEngineIsOn = true
+            recordingOutputFile = try? AVAudioFile(forWriting: recordingOutputUrl, settings: recordingOutputFormatSettings)
+            setStateAfterStartOrResume()
+        }
+    }
+    
+    public func stopRecordingWhileAudioEngineIsOn() {
+        isRecordingWhileAudioEngineIsOn = false
+        
+        speechWasNotDetectedOnceItStartsTimer?.invalidate()
+        speechWasNotDetectedOnceItStartsTimer = nil
+        speechWasNotDetectedAtAllTimer?.invalidate()
+        speechWasNotDetectedAtAllTimer = nil
+        
+        Task { @MainActor in
+            state = .stopped
+            audioMeterValues = [AudioMeterValue](repeating: AudioMeterValue(value: .zero), count: numberOfAudioMeters)
+            speechWasDetected(detected: false)
+        }
+    }
+    
+    
+    public func startAudioEngineAndTranscribingAndRecording() {
         if speechRecognizerMode == .speechRecognition {
             guard let recognizer, recognizer.isAvailable else {
                 error(AudioTranscribeRecordingError.recognizerIsUnavailable)
@@ -262,12 +327,12 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
             try audioEngine.start()
             setStateAfterStartOrResume()
         } catch {
-            stopTranscribingAndRecording()
+            stopAudioEngineAndTranscribingAndRecording()
             self.error(error)
         }
     }
     
-    public func stopTranscribingAndRecording() {
+    public func stopAudioEngineAndTranscribingAndRecording() {
         mixerNode?.removeTap(onBus: 0)
         audioEngine?.stop()
         
