@@ -11,12 +11,12 @@ import Combine
 
 public final class AudioTranscribeRecordingKit: ObservableObject {
     
-    public var isSpeechRecognizerEnabled: Bool
+    public var speechRecognizerMode: SpeechRecognizerMode
     public var isRecordingEnabled: Bool
     public var numberOfAudioMeters: Int
     public var recordingSettings: RecordingSettings {
         didSet {
-            if self.isSpeechRecognizerEnabled == false && self.isRecordingEnabled && (self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts || self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll) {
+            if self.speechRecognizerMode == .disabled && self.isRecordingEnabled && (self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts || self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll) {
                 error(AudioTranscribeRecordingError.speechRecognizerShouldBeEnabledForRecordingTimeoutNotificationOptions)
                 return
             }
@@ -90,7 +90,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
      requests access to the speech recognizer and the microphone.
      */
     @MainActor
-    public init(isSpeechRecognizerEnabled: Bool = true,
+    public init(speechRecognizerMode: SpeechRecognizerMode = .decibels,
                 isRecordingEnabled: Bool = true,
                 speechRecognizerSettings: SpeechRecognizerSettings = SpeechRecognizerSettings(supportedLanguage: SpeechRecognizerSettings.availableLanguages.first(where: { $0.identifier == "en-US" })),
                 recordingSettings: RecordingSettings = RecordingSettings(filename: "recording",
@@ -99,7 +99,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                                                                          shouldNotifyIfSpeechWasNotDetectedAtAll: true,
                                                                          speechWasNotDetectedAtAllTimeoutInterval: 10),
                 numberOfAudioMeters: Int = 4) {
-        self.isSpeechRecognizerEnabled = isSpeechRecognizerEnabled
+        self.speechRecognizerMode = speechRecognizerMode
         self.isRecordingEnabled = isRecordingEnabled
         self.speechRecognizerSettings = speechRecognizerSettings
         self.recordingSettings = recordingSettings
@@ -107,7 +107,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         self.audioMeterValues = [AudioMeterValue](repeating: AudioMeterValue(value: .zero), count: numberOfAudioMeters)
         self.audioMeterSingleValue = AudioMeterValue(value: 0)
         
-        if self.isSpeechRecognizerEnabled {
+        if self.speechRecognizerMode == .speechRecognition {
             if let locale = self.speechRecognizerSettings.supportedLanguage?.locale {
                 self.recognizer = SFSpeechRecognizer(locale: locale)
             } else {
@@ -122,7 +122,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
             self.recognizer = nil
         }
         
-        if self.isSpeechRecognizerEnabled == false && self.isRecordingEnabled && (self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts || self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll) {
+        if self.speechRecognizerMode == .disabled && self.isRecordingEnabled && (self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts || self.recordingSettings.shouldNotifyIfSpeechWasNotDetectedAtAll) {
             error(AudioTranscribeRecordingError.speechRecognizerShouldBeEnabledForRecordingTimeoutNotificationOptions)
             return
         }
@@ -134,7 +134,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     public func checkRequiredPermissions() async -> Bool {
         var hasFirstRequiredAuthorizationToRecognize = false
-        if self.isSpeechRecognizerEnabled {
+        if self.speechRecognizerMode == .speechRecognition {
             hasFirstRequiredAuthorizationToRecognize = await hasAuthorizationToRecognize()
         } else {
             hasFirstRequiredAuthorizationToRecognize = true
@@ -182,7 +182,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         audioEngine = AVAudioEngine()
         mixerNode = AVAudioMixerNode()
         
-        if isSpeechRecognizerEnabled {
+        if speechRecognizerMode == .speechRecognition {
             recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
             recognitionRequest?.shouldReportPartialResults = true
             recognitionRequest?.requiresOnDeviceRecognition = false
@@ -212,7 +212,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     // MARK: - Control methods (start, stop, pause, resume)
     
     public func startTranscribingAndRecording() {
-        if isSpeechRecognizerEnabled {
+        if speechRecognizerMode == .speechRecognition {
             guard let recognizer, recognizer.isAvailable else {
                 error(AudioTranscribeRecordingError.recognizerIsUnavailable)
                 return
@@ -236,7 +236,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                     return
                 }
                 
-                if self.isSpeechRecognizerEnabled {
+                if speechRecognizerMode == .speechRecognition{
                     self.recognitionRequest?.append(buffer)
                 }
                 
@@ -249,9 +249,12 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                 let scaledAvgPower = AudioTranscribeRecordingKit.scaledPower(power: avgPowerInDecibels)
                 self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
                 
+                if speechRecognizerMode == .decibels {
+                    verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: scaledAvgPower)
+                }
             }
 
-            if isSpeechRecognizerEnabled, let recognitionRequest = recognitionRequest {
+            if speechRecognizerMode == .speechRecognition, let recognitionRequest = recognitionRequest {
                 self.recognitionTask = recognizer?.recognitionTask(with: recognitionRequest, resultHandler: { [weak self] result, error in
                     self?.recognitionHandler(audioEngine: audioEngine, result: result, error: error)
                 })
@@ -308,7 +311,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     private func setStateAfterStartOrResume() {
         Task { @MainActor in
-            switch (isSpeechRecognizerEnabled, isRecordingEnabled) {
+            switch ((speechRecognizerMode == .speechRecognition || speechRecognizerMode == .decibels), isRecordingEnabled) {
             case (true, true):
                 state = .recordingAndTranscribing
             case (false, true):
@@ -352,6 +355,17 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                     return
                 }
                 
+                if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
+                    restartSpeechWasNotDetectedOnceItStartsTimer()
+                }
+            }
+        }
+    }
+    
+    private func verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: Float) {
+        Task { @MainActor in
+            if scaledAvgPower > 0.4 {
+                speechWasDetected(detected: true)
                 if recordingSettings.shouldNotifyIfSpeechWasNotDetectedOnceItStarts && speechWasDetectedSubject.value && (state == .recording || state == .recordingAndTranscribing || state == .transcribing) {
                     restartSpeechWasNotDetectedOnceItStartsTimer()
                 }
