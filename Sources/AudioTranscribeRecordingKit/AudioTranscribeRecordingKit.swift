@@ -79,9 +79,6 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     private var isInterrupted = false
     private var configChangePending = false
     
-    private var recordingOutputFile: AVAudioFile?
-    private var isRecordingWhileAudioEngineIsOn: Bool = false
-    
     public var recordingOutputUrl: URL {
         return recordingFolderURL.appendingPathComponent("\(recordingSettings.filename).\(recordingFileExtension)")
     }
@@ -214,54 +211,60 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     
     // MARK: - Control methods (start, stop, pause, resume)
     
-    public func stopAudioEngineAndRemoveTap() {
-        mixerNode?.removeTap(onBus: 0)
+    public func stopAudioEngine() {
         audioEngine?.stop()
     }
     
-    public func startAudioEngineAndInstallTap() {
-        guard let audioEngine = audioEngine, let mixerNode = mixerNode  else { return }
+    public func startAudioEngine() {
+        guard let audioEngine = audioEngine else { return }
         
         do {
-            let tapNode: AVAudioNode = mixerNode
-            let recordingFormat = tapNode.outputFormat(forBus: 0)
-            
-            tapNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] (buffer: AVAudioPCMBuffer, when: AVAudioTime) in
-                
-                guard let self = self else {
-                    return
-                }
-                
-                if isRecordingEnabled, isRecordingWhileAudioEngineIsOn, let recordingOutputFile, let convertedBuffer = convertBufferForAAC(buffer: buffer, to: recordingOutputFile.processingFormat) {
-                    try? recordingOutputFile.write(from: convertedBuffer)
-                }
-                
-                if isRecordingWhileAudioEngineIsOn {
-                    guard let avgPowerInDecibels = AudioTranscribeRecordingKit.avgPowerInDecibels(buffer: buffer) else { return }
-                    let scaledAvgPower = AudioTranscribeRecordingKit.scaledPower(power: avgPowerInDecibels)
-                    self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
-                    if speechRecognizerMode == .decibels {
-                        verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: scaledAvgPower)
-                    }
-                }
-            }
-            
             try audioEngine.start()
         } catch {
             self.error(error)
         }
     }
     
-    public func startRecordingWhileAudioEngineIsOn() {
-        if isRecordingEnabled {
-            isRecordingWhileAudioEngineIsOn = true
-            recordingOutputFile = try? AVAudioFile(forWriting: recordingOutputUrl, settings: recordingOutputFormatSettings)
-            setStateAfterStartOrResume()
-        }
+    public func startRecordingAndInstallTapWhileAudioEngineIsOn() {
+            guard let mixerNode = mixerNode  else { return }
+            
+            do {
+                let tapNode: AVAudioNode = mixerNode
+                let recordingFormat = tapNode.outputFormat(forBus: 0)
+                
+                var recordingOutputFile: AVAudioFile?
+                if isRecordingEnabled {
+                    recordingOutputFile = try AVAudioFile(forWriting: recordingOutputUrl, settings: recordingOutputFormatSettings)
+                }
+                
+                tapNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] (buffer: AVAudioPCMBuffer, when: AVAudioTime) in
+                    
+                    guard let self = self else {
+                        return
+                    }
+                    
+                    if isRecordingEnabled, let recordingOutputFile, let convertedBuffer = convertBufferForAAC(buffer: buffer, to: recordingOutputFile.processingFormat) {
+                        try? recordingOutputFile.write(from: convertedBuffer)
+                    }
+                    
+                        guard let avgPowerInDecibels = AudioTranscribeRecordingKit.avgPowerInDecibels(buffer: buffer) else { return }
+                        let scaledAvgPower = AudioTranscribeRecordingKit.scaledPower(power: avgPowerInDecibels)
+                        self.audioMeterHandler(scaledAvgPower: scaledAvgPower)
+                        if speechRecognizerMode == .decibels {
+                            verifyIfScaledAvgPowerCanMeanSpeech(scaledAvgPower: scaledAvgPower)
+                        }
+                    
+                }
+                
+                setStateAfterStartOrResume()
+            } catch {
+                self.error(error)
+            }
+            
     }
     
-    public func stopRecordingWhileAudioEngineIsOn() {
-        isRecordingWhileAudioEngineIsOn = false
+    public func stopRecordingAndRemoveTapWhileAudioEngineIsOn() {
+        mixerNode?.removeTap(onBus: 0)
         
         speechWasNotDetectedOnceItStartsTimer?.invalidate()
         speechWasNotDetectedOnceItStartsTimer = nil
