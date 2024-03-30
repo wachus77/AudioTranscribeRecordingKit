@@ -226,7 +226,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     }
     
     public func startRecordingAndInstallTapWhileAudioEngineIsOn() {
-            guard let mixerNode = mixerNode  else { return }
+            guard let mixerNode = mixerNode, let audioEngine = audioEngine  else { return }
             
             do {
                 let tapNode: AVAudioNode = mixerNode
@@ -255,7 +255,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                         }
                     
                 }
-                
+                audioEngine.reset()
                 setStateAfterStartOrResume()
             } catch {
                 self.error(error)
