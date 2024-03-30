@@ -225,6 +225,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
         }
     }
     
+    var recordingOutputFile: AVAudioFile?
     public func startRecordingAndInstallTapWhileAudioEngineIsOn() {
             guard let mixerNode = mixerNode, let audioEngine = audioEngine  else { return }
             
@@ -232,7 +233,6 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                 let tapNode: AVAudioNode = mixerNode
                 let recordingFormat = tapNode.outputFormat(forBus: 0)
                 
-                var recordingOutputFile: AVAudioFile?
                 if isRecordingEnabled {
                     recordingOutputFile = try AVAudioFile(forWriting: recordingOutputUrl, settings: recordingOutputFormatSettings)
                 }
@@ -255,7 +255,6 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
                         }
                     
                 }
-                audioEngine.reset()
                 setStateAfterStartOrResume()
             } catch {
                 self.error(error)
@@ -264,6 +263,7 @@ public final class AudioTranscribeRecordingKit: ObservableObject {
     }
     
     public func stopRecordingAndRemoveTapWhileAudioEngineIsOn() {
+        recordingOutputFile = nil
         mixerNode?.removeTap(onBus: 0)
         
         speechWasNotDetectedOnceItStartsTimer?.invalidate()
